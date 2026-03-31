@@ -49,26 +49,29 @@ class IppLabelPrinterDriver(LabelPrinterBaseDriver):
         uri = self._get_uri(machine)
         timeout = self._get_timeout(machine)
         copies = kwargs.get("printing_options", {}).get("copies", 1)
+        machine.set_status(LabelPrinterMachine.MACHINE_STATUS.PRINTING)
         pdf_data = self.render_to_pdf_data(label, item, **kwargs)
         job_name = f"inventree-{label.name}-{item.pk}"
         try:
             result = print_job(uri, pdf_data, job_name, copies=copies, timeout=timeout)
             logger.info("Printed %s to %s (job %s)", job_name, uri, result.get("job_id"))
+            machine.set_status(LabelPrinterMachine.MACHINE_STATUS.OPERATIONAL)
         except IppError as e:
             logger.error("IPP print failed for %s: %s", uri, e)
+            machine.set_status(LabelPrinterMachine.MACHINE_STATUS.DISCONNECTED)
             raise ConnectionError(str(e)) from e
 
     def init_machine(self, machine):
         uri = self._get_uri(machine)
         if not uri:
-            machine.set_status(LabelPrinterMachine.MACHINE_STATUS.DISCONNECTED)
+            machine.handle_error("No PRINTER_URI configured")
             return
         try:
             validate_job(uri, timeout=self._get_timeout(machine))
-            machine.set_status(LabelPrinterMachine.MACHINE_STATUS.CONNECTED)
+            machine.set_status(LabelPrinterMachine.MACHINE_STATUS.OPERATIONAL)
         except Exception as e:
             logger.warning("Failed to connect to %s: %s", uri, e)
-            machine.set_status(LabelPrinterMachine.MACHINE_STATUS.DISCONNECTED)
+            machine.handle_error(str(e))
 
     def ping_machines(self):
         for machine in self.get_machines():
@@ -80,17 +83,11 @@ class IppLabelPrinterDriver(LabelPrinterBaseDriver):
                 attrs = get_printer_attributes(uri, timeout=5.0)
                 state = attrs.get("printer-state", 0)
                 reasons = attrs.get("printer-state-reasons", "none")
-                if state == 3:  # idle
-                    machine.set_status(LabelPrinterMachine.MACHINE_STATUS.CONNECTED)
-                elif state == 4:  # processing
-                    machine.set_status(LabelPrinterMachine.MACHINE_STATUS.CONNECTED)
+                if state in (3, 4):  # idle or processing
+                    machine.set_status(LabelPrinterMachine.MACHINE_STATUS.OPERATIONAL)
                 elif state == 5:  # stopped
-                    machine.set_status(
-                        LabelPrinterMachine.MACHINE_STATUS.DISCONNECTED,
-                        status_text=f"Stopped: {reasons}",
-                    )
+                    machine.set_status(LabelPrinterMachine.MACHINE_STATUS.DISCONNECTED)
+                    machine.set_status_text(f"Stopped: {reasons}")
             except Exception as e:
-                machine.set_status(
-                    LabelPrinterMachine.MACHINE_STATUS.DISCONNECTED,
-                    status_text=str(e),
-                )
+                machine.set_status(LabelPrinterMachine.MACHINE_STATUS.DISCONNECTED)
+                machine.set_status_text(str(e))
