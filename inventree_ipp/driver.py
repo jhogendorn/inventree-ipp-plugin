@@ -55,7 +55,7 @@ class IppLabelPrinterDriver(LabelPrinterBaseDriver):
         try:
             result = print_job(uri, pdf_data, job_name, copies=copies, timeout=timeout)
             logger.info("Printed %s to %s (job %s)", job_name, uri, result.get("job_id"))
-            machine.set_status(LabelPrinterMachine.MACHINE_STATUS.OPERATIONAL)
+            machine.set_status(LabelPrinterMachine.MACHINE_STATUS.CONNECTED)
         except IppError as e:
             logger.error("IPP print failed for %s: %s", uri, e)
             machine.set_status(LabelPrinterMachine.MACHINE_STATUS.DISCONNECTED)
@@ -68,7 +68,7 @@ class IppLabelPrinterDriver(LabelPrinterBaseDriver):
             return
         try:
             validate_job(uri, timeout=self._get_timeout(machine))
-            machine.set_status(LabelPrinterMachine.MACHINE_STATUS.OPERATIONAL)
+            machine.set_status(LabelPrinterMachine.MACHINE_STATUS.CONNECTED)
         except Exception as e:
             logger.warning("Failed to connect to %s: %s", uri, e)
             machine.handle_error(str(e))
@@ -84,7 +84,7 @@ class IppLabelPrinterDriver(LabelPrinterBaseDriver):
                 state = attrs.get("printer-state", 0)
                 reasons = attrs.get("printer-state-reasons", "none")
                 if state in (3, 4):  # idle or processing
-                    machine.set_status(LabelPrinterMachine.MACHINE_STATUS.OPERATIONAL)
+                    machine.set_status(LabelPrinterMachine.MACHINE_STATUS.CONNECTED)
                 elif state == 5:  # stopped
                     machine.set_status(LabelPrinterMachine.MACHINE_STATUS.DISCONNECTED)
                     machine.set_status_text(f"Stopped: {reasons}")
