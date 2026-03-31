@@ -2,6 +2,9 @@
 
 import struct
 from enum import IntEnum
+from urllib.parse import urlparse
+
+import httpx
 
 
 class IppOperation(IntEnum):
@@ -129,3 +132,101 @@ def decode_ipp_response(data: bytes) -> dict:
         "request_id": request_id,
         "attributes": attributes,
     }
+
+
+_request_counter = 0
+
+
+def _next_request_id() -> int:
+    global _request_counter
+    _request_counter += 1
+    return _request_counter
+
+
+def _ipp_uri_to_http(uri: str) -> str:
+    parsed = urlparse(uri)
+    scheme = "https" if parsed.scheme == "ipps" else "http"
+    return parsed._replace(scheme=scheme).geturl()
+
+
+def _send_request(uri: str, data: bytes, timeout: float = 30.0) -> dict:
+    http_url = _ipp_uri_to_http(uri)
+    with httpx.Client(timeout=timeout) as client:
+        response = client.post(
+            http_url,
+            content=data,
+            headers={"Content-Type": "application/ipp"},
+        )
+        response.raise_for_status()
+    result = decode_ipp_response(response.content)
+    if result["status_code"] > 0x00FF:
+        msg = result["attributes"].get("status-message", "")
+        raise IppError(result["status_code"], msg)
+    return result
+
+
+def print_job(
+    uri: str,
+    pdf_data: bytes,
+    job_name: str,
+    copies: int = 1,
+    timeout: float = 30.0,
+) -> dict:
+    data = encode_ipp_request(
+        operation=IppOperation.PRINT_JOB,
+        request_id=_next_request_id(),
+        printer_uri=uri,
+        job_name=job_name,
+        document_format="application/pdf",
+        document_data=pdf_data,
+        copies=copies,
+    )
+    result = _send_request(uri, data, timeout)
+    job_id = result["attributes"].get("job-id")
+    return {"job_id": job_id, "status_code": result["status_code"]}
+
+
+def get_printer_attributes(uri: str, timeout: float = 10.0) -> dict:
+    data = encode_ipp_request(
+        operation=IppOperation.GET_PRINTER_ATTRIBUTES,
+        request_id=_next_request_id(),
+        printer_uri=uri,
+    )
+    result = _send_request(uri, data, timeout)
+    return result["attributes"]
+
+
+def get_job_attributes(uri: str, job_id: int, timeout: float = 10.0) -> dict:
+    data = encode_ipp_request(
+        operation=IppOperation.GET_JOB_ATTRIBUTES,
+        request_id=_next_request_id(),
+        printer_uri=uri,
+        job_id=job_id,
+    )
+    result = _send_request(uri, data, timeout)
+    return result["attributes"]
+
+
+def validate_job(
+    uri: str,
+    document_format: str = "application/pdf",
+    timeout: float = 10.0,
+) -> bool:
+    data = encode_ipp_request(
+        operation=IppOperation.VALIDATE_JOB,
+        request_id=_next_request_id(),
+        printer_uri=uri,
+        document_format=document_format,
+    )
+    _send_request(uri, data, timeout)
+    return True
+
+
+def cancel_job(uri: str, job_id: int, timeout: float = 10.0) -> None:
+    data = encode_ipp_request(
+        operation=IppOperation.CANCEL_JOB,
+        request_id=_next_request_id(),
+        printer_uri=uri,
+        job_id=job_id,
+    )
+    _send_request(uri, data, timeout)
