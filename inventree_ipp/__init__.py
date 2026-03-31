@@ -11,7 +11,7 @@ class InvenTreeIppPlugin(MachineDriverMixin, InvenTreePlugin):
     SLUG = "inventree-ipp"
     TITLE = "IPP Label Printer"
     DESCRIPTION = "Print labels to any IPP-capable network printer"
-    VERSION = "0.1.0"
+    VERSION = "0.1.1"
     MIN_VERSION = "0.18.0"
 
     def get_machine_drivers(self):
