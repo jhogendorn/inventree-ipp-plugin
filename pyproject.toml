@@ -6,10 +6,14 @@ build-backend = "setuptools.build_meta"
 name = "inventree-ipp-plugin"
 version = "0.1.1"
 description = "IPP label printer plugin for InvenTree"
+license = {text = "MIT"}
 requires-python = ">=3.11"
 dependencies = [
     "httpx>=0.27",
 ]
+
+[project.urls]
+Source = "https://github.com/jhogendorn/inventree-ipp-plugin"
 
 [project.entry-points."inventree_plugins"]
 inventree-ipp = "inventree_ipp:InvenTreeIppPlugin"
